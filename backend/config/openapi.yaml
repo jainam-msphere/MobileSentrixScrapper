@@ -1,0 +1,383 @@
+openapi: 3.0.0
+info:
+  title: MS Rules Engine API
+  description: API for managing rules, request cases, and rule evaluation in the Mobilesentrix Rules Engine.
+  version: 1.0.0
+  contact:
+    name: Dev Patel
+    email: dev@msphere.io
+
+servers:
+  - url: https://api.dev.msrestapi.com/ruleengine
+
+security:
+  - bearerAuth: []
+  - userIdHeader: []
+  - clientIdHeader: []
+    clientSecretHeader: []
+
+tags:
+  - name: GSM
+    x-summary: source website
+    description: depicts the data which is scrapped from gsmarena.com
+  - name: PhoneDb
+    x-summary: source website
+    description: depicts the data which is scrapped from phonedb.net
+  - name: System
+    x-summary: server
+    description: used for checking server status
+
+paths:
+  /server:health:
+    get:
+      tags:
+        - System
+      summary: Get health status
+      description: Check if the service is running and healthy.
+      operationId: health
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: server ok
+        "500":
+          description: server issue
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: server error
+
+  /brands/{brand_name}/devices/{item_name}/sources/{source_type}:
+    get:
+      tags:
+        - GSM
+        - PhoneDb
+      summary: List device whole id ig given
+      description: Used to fetch data of a phone
+      operationId: GetPhoneDetails
+      parameters:
+        - name: item_name
+          in: path
+          required: true
+          schema:
+            type: string
+            description: name of phone
+            example: iphone 12
+        - name: brand_name
+          in: path
+          required: true
+          schema:
+            type: string
+            description: brand of phone
+            example: apple
+        - name: source_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - link
+              - data
+            description: source of finding phone data
+            example: link
+        - name: link
+          in: query
+          schema:
+            type: string
+            description: link of webpage to scrap
+            example: gsmarena.com/apple/phone/iphone12
+        - name: source_name
+          in: query
+          schema:
+            type: string
+            enum:
+              - phonedb
+              - gsmarena
+            description: tell from which source data needs to be fetched from
+            example: gsmarena
+
+      responses:
+        "200":
+          description: info of phone retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /manufacturers:
+    get:
+      tags:
+        - GSM
+        - PhoneDb
+      summary: manufacturers list
+      description: Used to fetch names of manufacturers
+      operationId: "ListManufacturers"
+      parameters:
+        - in: query
+          name: max_page_size
+          schema:
+            type: integer
+        - in: query
+          name: page_token
+          schema:
+            type: string
+      responses:
+        "200":
+          description: names of manufacturers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next_page_token:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Brands"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /manufacturers/{manufacturer_name}/devices:
+    get:
+      tags:
+        - GSM
+        - PhoneDb
+      summary: List devices
+      description: Used to fetch devices from a manufacturer
+      operationId: "ListDevices"
+      parameters:
+        - in: path
+          name: manufacturer_name
+          required: true
+          schema:
+            type: string
+            description: name of manufacturer
+            example: apple
+        - in: query
+          name: max_page_size
+          schema:
+            type: integer
+        - in: query
+          name: page_token
+          schema:
+            type: string
+      responses:
+        "200":
+          description: info of devices under manufacturer retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  next_page_token:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BrandDevices"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    userIdHeader:
+      type: apiKey
+      in: header
+      name: userId
+      description: User ID for authorization in header (custom header, not an API key)
+    clientIdHeader:
+      type: apiKey
+      in: header
+      name: X-Client-ID
+      description: Client ID for service-to-service authentication
+    clientSecretHeader:
+      type: apiKey
+      in: header
+      name: X-Client-Secret
+      description: Client secret for service-to-service authentication
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - type
+        - status
+        - title
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Error type classification
+          example: INVALID_ARGUMENT
+          enum:
+            - INVALID_ARGUMENT
+            - UNAUTHENTICATED
+            - PERMISSION_DENIED
+            - NOT_FOUND
+            - ALREADY_EXISTS
+            - RESOURCE_EXHAUSTED
+            - INTERNAL
+            - UNAVAILABLE
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+        title:
+          type: string
+          description: Human-readable error title
+          example: Validation error
+        detail:
+          type: string
+          description: Detailed error message
+          example: Field 'name' is required
+        metadata:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+
+    Device:
+      type: object
+      required:
+        - phoneId
+        - phoneName
+        - companyName
+      x-aep-resource:
+        type: scrapper.com/scrapper
+        singular: device
+        plural: devices
+        patterns:
+          - "devices/{item_name}"
+      properties:
+        path:
+          type: string
+          description: url to fetch the object.
+        deviceId:
+          type: string
+          description: Unique identifier for the phone.
+        deviceName:
+          type: string
+          example: "iPhone 12"
+        deviceBrand:
+          type: string
+          example: "Apple"
+        deviceInfo:
+          type: object
+          description: "Dynamic object containing unfixed hardware/software specs."
+          additionalProperties: true
+          example:
+            screen_type: "OLED"
+            battery_health: 98
+            custom_tags: ["refurbished", "sale"]
+
+    Brands:
+      type: object
+      x-aep-resource:
+        type: scrapper.com/manufacturers
+        singular: manufacturer
+        plural: manufacturers
+        patterns:
+          - "manufacturers/{manufacturer_name}/devices"
+      properties:
+        path:
+          type: string
+          description: path
+        manufacturer:
+          type: string
+          description: name of brand
+          example: apple,xiaomi etc
+
+    BrandDevices:
+      type: object
+      x-aep-resource:
+        type: scrapper.com/device
+        singular: device
+        plural: devices
+        patterns:
+          - "manufacturers/{manufacturer_name}/devices"
+      properties:
+        path:
+          type: string
+          description: path
+        manufacturer:
+          type: string
+          description: manufacturer name
+          example: apple,xiaomi
+        device:
+          type: string
+          description: name of deivce
+          example: iphone 12,xiaomi 17 etc
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - missing or invalid authorization
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            type: UNAUTHENTICATED
+            status: 401
+            title: Authentication required
+            detail: Missing or invalid userId header
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            type: NOT_FOUND
+            status: 404
+            title: Resource not found
+            detail: The requested resource does not exist
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            type: INTERNAL
+            status: 500
+            title: Internal server error
+            detail: An unexpected error occurred
+
+    BadRequestError:
+      description: Bad request error
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            type: INVALID_ARGUMENT
+            status: 400
+            title: Bad request
+            detail: Error in params or body
