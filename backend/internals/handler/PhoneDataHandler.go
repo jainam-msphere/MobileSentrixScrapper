@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,6 +97,7 @@ func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
 	source := string(ctx.QueryArgs().Peek("source_name"))
 	link := string(ctx.QueryArgs().Peek("link"))
 
+	fmt.Println(link, variant, item, brand)
 	if variant != "" && variant != "link" && variant != "data" {
 		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "variant type invalid")
 		return
@@ -111,7 +114,6 @@ func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
 		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
 		return
 	}
-
 	var result *dynamodb.QueryOutput
 
 	result, err = h.Db.Query(context.TODO(), &dynamodb.QueryInput{
@@ -128,7 +130,6 @@ func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
 	}
 
 	if result != nil && len(result.Items) > 0 {
-
 		var phone []models.ScrapData
 		err = attributevalue.UnmarshalListOfMaps(result.Items, &phone)
 		if err != nil {
@@ -155,20 +156,20 @@ func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
 		if source == "gsmarena" {
 			scrapedData, err = internals.PrintSpecList(link, item, brand)
 			if err != nil {
-				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
 				return
 			}
 		}
 		if source == "phonedb" {
 			html, err := internals.FetchDetailTable(internals.PhoneResult{Title: item, DetailHref: link})
 			if err != nil {
-				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed fetching data pdb")
 				return
 			}
 			temp := internals.BodyObj{HtmlString: html, PhoneName: item, CompanyName: brand}
 			scrapedData, err = internals.PDBParser(temp)
 			if err != nil {
-				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+				utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data pdb")
 				return
 			}
 		}
@@ -216,43 +217,73 @@ func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
 	ctx.SetBody(response)
 }
 
-// func (h *HandlerDb) UpdatePhoneItem(ctx *fasthttp.RequestCtx) {
-// 	itemVal := ctx.UserValue("item_name")
-// 	name, ok := itemVal.(string)
-// 	if !ok || name == "" {
-// 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-// 		return
-// 	}
-// 	var newPhoneScrapData models.ScrapData
-// 	if err := json.Unmarshal(ctx.PostBody(), &newPhoneScrapData); err != nil {
-// 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-// 		ctx.SetBodyString(`{"error": "invalid request body"}`)
-// 		return
-// 	}
-// 	dVal, err := attributevalue.Marshal(newPhoneScrapData.DeviceInfo)
-// 	if err != nil {
-// 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-// 		return
-// 	}
-// 	_, err = h.Db.UpdateItem(context.TODO(), &dynamodb.UpdateItemInput{
-// 		TableName: aws.String(database.TableName),
-// 		Key: map[string]types.AttributeValue{
-// 			"id": &types.AttributeValueMemberS{Value: name},
-// 		},
-// 		UpdateExpression: aws.String("SET DeviceInfo = :d"),
-// 		ExpressionAttributeValues: map[string]types.AttributeValue{
-// 			":d": dVal,
-// 		},
-// 		ReturnValues: types.ReturnValueAllNew,
-// 	})
-// 	if err != nil {
-// 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-// 		ctx.WriteString(`{"error": "` + err.Error() + `"}`)
-// 		return
-// 	}
-// 	ctx.SetContentType("application/json")
-// 	json.NewEncoder(ctx).Encode(newPhoneScrapData)
-// }
+func (h *HandlerDb) UpdateDevices(ctx *fasthttp.RequestCtx) {
+	manufacturerVal := ctx.UserValue("manufacturer_name")
+	manufacturerEncoded, ok := manufacturerVal.(string)
+	if !ok || manufacturerEncoded == "" {
+		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type not found")
+		return
+	}
+	manufacturer, err := url.PathUnescape(manufacturerEncoded)
+	if err != nil {
+		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
+		return
+	}
+
+	result, err := h.Db.Query(context.TODO(), &dynamodb.QueryInput{
+		TableName:              aws.String("DevicesList"),
+		KeyConditionExpression: aws.String("brandName = :brand"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":brand": &types.AttributeValueMemberS{Value: manufacturer},
+		},
+	})
+	if err != nil {
+		utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database fetch failed")
+		return
+	}
+
+	if result == nil || len(result.Items) < 1 {
+		utils.SendError(ctx, fasthttp.StatusBadRequest, "data not found", "no such brand exist in database which you can update, please fetch the brand to automatically insert it in db")
+	}
+
+	brandURL, err := internals.FindBrandUrl(manufacturer)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	t := unique(findDevices(brandURL))
+
+	var newDevicesList models.DevicesInfo
+	newDevicesList.BrandName = manufacturer
+	newDevicesList.BrandDevicesList = t
+
+	fmt.Println(len(t), result.Items)
+
+	newList, err := attributevalue.Marshal(newDevicesList.BrandDevicesList)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		return
+	}
+	_, err = h.Db.UpdateItem(context.TODO(), &dynamodb.UpdateItemInput{
+		TableName: aws.String("DevicesList"),
+		Key: map[string]types.AttributeValue{
+			"brandName": &types.AttributeValueMemberS{Value: manufacturer},
+		},
+		UpdateExpression: aws.String("set brandDeviceLists = :d"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":d": newList,
+		},
+		ReturnValues: types.ReturnValueAllNew,
+	})
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.WriteString(`{"error": "` + err.Error() + `"}`)
+		return
+	}
+	ctx.SetContentType("application/json")
+	json.NewEncoder(ctx).Encode(newDevicesList)
+}
 
 func (h *HandlerDb) HealthChecker(ctx *fasthttp.RequestCtx) {
 	if h.Db != nil {

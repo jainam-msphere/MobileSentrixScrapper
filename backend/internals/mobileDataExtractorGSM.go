@@ -19,7 +19,7 @@ const (
 
 var client = &http.Client{Timeout: 20 * time.Second}
 
-func fetchHTML(url string) (*html.Node, error) {
+func FetchHTML(url string) (*html.Node, error) {
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
@@ -40,7 +40,7 @@ func fetchHTML(url string) (*html.Node, error) {
 	return html.Parse(strings.NewReader(string(body)))
 }
 
-func attr(n *html.Node, key string) string {
+func Attr(n *html.Node, key string) string {
 	for _, a := range n.Attr {
 		if a.Key == key {
 			return a.Val
@@ -49,8 +49,8 @@ func attr(n *html.Node, key string) string {
 	return ""
 }
 
-func hasClass(n *html.Node, cls string) bool {
-	classes := strings.Fields(attr(n, "class"))
+func HasClass(n *html.Node, cls string) bool {
+	classes := strings.Fields(Attr(n, "class"))
 	for _, c := range classes {
 		if c == cls {
 			return true
@@ -59,13 +59,13 @@ func hasClass(n *html.Node, cls string) bool {
 	return false
 }
 
-func textContent(n *html.Node) string {
+func TextContent(n *html.Node) string {
 	if n.Type == html.TextNode {
 		return n.Data
 	}
 	var parts []string
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		t := textContent(c)
+		t := TextContent(c)
 		if t != "" {
 			parts = append(parts, t)
 		}
@@ -82,7 +82,7 @@ func walk(n *html.Node, fn func(*html.Node) bool) {
 	}
 }
 
-func findAll(root *html.Node, match func(*html.Node) bool) []*html.Node {
+func FindAll(root *html.Node, match func(*html.Node) bool) []*html.Node {
 	var results []*html.Node
 	walk(root, func(n *html.Node) bool {
 		if match(n) {
@@ -93,7 +93,7 @@ func findAll(root *html.Node, match func(*html.Node) bool) []*html.Node {
 	return results
 }
 
-func findFirst(root *html.Node, match func(*html.Node) bool) *html.Node {
+func FindFirst(root *html.Node, match func(*html.Node) bool) *html.Node {
 	var result *html.Node
 	walk(root, func(n *html.Node) bool {
 		if result != nil {
@@ -108,36 +108,36 @@ func findFirst(root *html.Node, match func(*html.Node) bool) *html.Node {
 	return result
 }
 
-func isElement(n *html.Node, tag string) bool {
+func IsElement(n *html.Node, tag string) bool {
 	return n.Type == html.ElementNode && n.Data == tag
 }
 
-func findBrandURL(brandName string) (string, error) {
-	doc, err := fetchHTML(baseURL + "makers.php3")
+func FindBrandUrl(brandName string) (string, error) {
+	doc, err := FetchHTML(baseURL + "makers.php3")
 	if err != nil {
 		return "", fmt.Errorf("fetch makers page: %w", err)
 	}
 
 	target := strings.ToLower(strings.TrimSpace(brandName))
 
-	links := findAll(doc, func(n *html.Node) bool {
-		return isElement(n, "a") && strings.Contains(attr(n, "href"), "-phones-")
+	links := FindAll(doc, func(n *html.Node) bool {
+		return IsElement(n, "a") && strings.Contains(Attr(n, "href"), "-phones-")
 	})
 
 	for _, a := range links {
-		text := strings.ToLower(strings.TrimSpace(textContent(a)))
+		text := strings.ToLower(strings.TrimSpace(TextContent(a)))
 
-		innerSpan := findFirst(a, func(n *html.Node) bool {
-			return isElement(n, "span")
+		innerSpan := FindFirst(a, func(n *html.Node) bool {
+			return IsElement(n, "span")
 		})
 		if innerSpan != nil {
-			spanText := textContent(innerSpan)
-			text = strings.ToLower(strings.TrimSpace(strings.Replace(textContent(a), spanText, "", 1)))
+			spanText := TextContent(innerSpan)
+			text = strings.ToLower(strings.TrimSpace(strings.Replace(TextContent(a), spanText, "", 1)))
 		}
 		text = strings.TrimSpace(text)
 
 		if text == target {
-			href := attr(a, "href")
+			href := Attr(a, "href")
 			return baseURL + href, nil
 		}
 	}
@@ -146,58 +146,58 @@ func findBrandURL(brandName string) (string, error) {
 }
 
 type pageResult struct {
-	deviceURL string
-	nextURL   string
+	DeviceURL string
+	NextURL   string
 }
 
-func scanPage(doc *html.Node, deviceName string) pageResult {
+func ScanPage(doc *html.Node, deviceName string) pageResult {
 	target := strings.ToLower(strings.TrimSpace(deviceName))
 
-	makersDiv := findFirst(doc, func(n *html.Node) bool {
-		return isElement(n, "div") && hasClass(n, "makers")
+	makersDiv := FindFirst(doc, func(n *html.Node) bool {
+		return IsElement(n, "div") && HasClass(n, "makers")
 	})
 	if makersDiv == nil {
 		return pageResult{}
 	}
 
-	items := findAll(makersDiv, func(n *html.Node) bool {
-		return isElement(n, "li")
+	items := FindAll(makersDiv, func(n *html.Node) bool {
+		return IsElement(n, "li")
 	})
 
 	for _, li := range items {
-		a := findFirst(li, func(n *html.Node) bool { return isElement(n, "a") })
+		a := FindFirst(li, func(n *html.Node) bool { return IsElement(n, "a") })
 		if a == nil {
 			continue
 		}
-		span := findFirst(a, func(n *html.Node) bool { return isElement(n, "span") })
+		span := FindFirst(a, func(n *html.Node) bool { return IsElement(n, "span") })
 		if span == nil {
 			continue
 		}
-		name := strings.TrimSpace(textContent(span))
+		name := strings.TrimSpace(TextContent(span))
 		// if strings.ToLower(name) == target {
 		nameClean := strings.ToLower(strings.TrimSpace(name))
 		targetClean := strings.ToLower(strings.TrimSpace(target))
 
 		if strings.Contains(nameClean, targetClean) {
-			href := attr(a, "href")
-			return pageResult{deviceURL: baseURL + href}
+			href := Attr(a, "href")
+			return pageResult{DeviceURL: baseURL + href}
 		}
 	}
 
-	paginationLinks := findAll(doc, func(n *html.Node) bool {
-		return isElement(n, "a") && strings.Contains(attr(n, "class"), "prevnextbutton")
+	paginationLinks := FindAll(doc, func(n *html.Node) bool {
+		return IsElement(n, "a") && strings.Contains(Attr(n, "class"), "prevnextbutton")
 	})
 
 	if len(paginationLinks) == 2 {
 		nextA := paginationLinks[1]
 
-		nextHref := attr(nextA, "href")
-		nextClass := attr(nextA, "class")
+		nextHref := Attr(nextA, "href")
+		nextClass := Attr(nextA, "class")
 		if strings.Contains(nextClass, "disabled") || nextHref == "" || nextHref == "#" {
 			fmt.Println("Reached last page, device not found.")
 			return pageResult{}
 		}
-		return pageResult{nextURL: baseURL + nextHref}
+		return pageResult{NextURL: baseURL + nextHref}
 	}
 	return pageResult{}
 }
@@ -207,18 +207,18 @@ func findDeviceURL(brandURL, deviceName string) (string, error) {
 	page := 1
 
 	for {
-		doc, err := fetchHTML(currentURL)
+		doc, err := FetchHTML(currentURL)
 		if err != nil {
 			return "", fmt.Errorf("fetch brand page: %w", err)
 		}
 
-		result := scanPage(doc, deviceName)
+		result := ScanPage(doc, deviceName)
 
-		if result.deviceURL != "" {
-			return result.deviceURL, nil
+		if result.DeviceURL != "" {
+			return result.DeviceURL, nil
 		}
-		if result.nextURL != "" {
-			currentURL = result.nextURL
+		if result.NextURL != "" {
+			currentURL = result.NextURL
 			page++
 			time.Sleep(1000 * time.Millisecond)
 			continue
@@ -228,6 +228,39 @@ func findDeviceURL(brandURL, deviceName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("device %q not found under brand", deviceName)
+}
+
+func FindBrandsInGSM() ([]string, error) {
+	doc, err := FetchHTML(baseURL + "makers.php3")
+	if err != nil {
+		return []string{}, fmt.Errorf("fetch makers page: %w", err)
+	}
+
+	links := FindAll(doc, func(n *html.Node) bool {
+		return IsElement(n, "a") && strings.Contains(Attr(n, "href"), "-phones-")
+	})
+	var res []string
+	for _, a := range links {
+		text := strings.ToLower(strings.TrimSpace(TextContent(a)))
+
+		innerSpan := FindFirst(a, func(n *html.Node) bool {
+			return IsElement(n, "span")
+		})
+		if innerSpan != nil {
+			spanText := TextContent(innerSpan)
+			text = strings.ToLower(strings.TrimSpace(strings.Replace(TextContent(a), spanText, "", 1)))
+		}
+		text = strings.TrimSpace(text)
+
+		if text != "" {
+			res = append(res, text)
+		}
+	}
+
+	if len(res) == 0 {
+		return []string{}, fmt.Errorf("brands not found")
+	}
+	return res, nil
 }
 
 func renderNode(n *html.Node, sb *strings.Builder) {
@@ -253,13 +286,13 @@ func renderNode(n *html.Node, sb *strings.Builder) {
 }
 
 func PrintSpecList(deviceURL string, device string, brand string) ([]byte, error) {
-	doc, err := fetchHTML(deviceURL)
+	doc, err := FetchHTML(deviceURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch device page: %w", err)
 	}
 
-	div := findFirst(doc, func(n *html.Node) bool {
-		return isElement(n, "div") && attr(n, "id") == "specs-list"
+	div := FindFirst(doc, func(n *html.Node) bool {
+		return IsElement(n, "div") && Attr(n, "id") == "specs-list"
 	})
 
 	if div == nil {
@@ -290,7 +323,7 @@ func FetchDataGSM(device string, brand string) ([]byte, error) {
 		deviceName = "Pixel 10 Pro"
 	}
 
-	brandURL, err := findBrandURL(brandName)
+	brandURL, err := FindBrandUrl(brandName)
 	if err != nil {
 		fmt.Println(err)
 	}

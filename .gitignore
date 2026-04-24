@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 *.xlsx
 *.sum
+/backend/cmd/database/
