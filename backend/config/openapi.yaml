@@ -200,6 +200,47 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+    patch:
+      tags:
+        - GSM
+      summary: List devices
+      description: update the list of devices under particular manufacturer
+      operationId: "UpdateDevices"
+      parameters:
+        - in: path
+          name: manufacturer_name
+          required: true
+          schema:
+            type: string
+            description: name of manufacturer
+            example: apple
+      responses:
+        "200":
+          description: info of devices under manufacturer retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  BrandName:
+                    type: string
+                    description: name of manufacturer who got updated
+                    readOnly: true
+                    example: apple
+                  BrandDevicesList:
+                    type: array
+                    readOnly: true
+                    items:
+                      type: string
+                      description: list of latest devices produced by manufacturer
+                      example: '[iphone 17e","ipad air 13 (2026)","ipad air 11 (2026).......]'
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     bearerAuth:
