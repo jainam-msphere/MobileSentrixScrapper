@@ -178,7 +178,7 @@ func ScanPage(doc *html.Node, deviceName string) pageResult {
 		nameClean := strings.ToLower(strings.TrimSpace(name))
 		targetClean := strings.ToLower(strings.TrimSpace(target))
 
-		if strings.Contains(nameClean, targetClean) {
+		if targetClean == nameClean {
 			href := Attr(a, "href")
 			return pageResult{DeviceURL: baseURL + href}
 		}
@@ -346,6 +346,7 @@ func FetchDataGSM(device string, brand string) ([]byte, error) {
 			}
 		}
 	} else {
+		fmt.Println(deviceURL, deviceName, brandName)
 		return PrintSpecList(deviceURL, deviceName, brandName)
 	}
 	return []byte{}, nil

@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect } from "react";
+import { JSONCombiner } from "./helper/combiner";
 
 export default function DeviceForm() {
   const [manufacturers, setManufacturers] = useState([]);
@@ -27,18 +28,13 @@ export default function DeviceForm() {
   }, []);
 
   useEffect(() => {
-    setSelectedManufacturer("");
-    setSelectedDevice("");
-  }, [useLink]);
-
-  useEffect(() => {
     if (!selectedManufacturer) {
       setDevices([]);
       setSelectedDevice("");
       return;
     }
 
-    if (!useLink) {
+    if (selectedManufacturer) {
       setIsFetchingDevice(true);
       const query = new URLSearchParams({
         page_token: "n/a",
@@ -53,7 +49,7 @@ export default function DeviceForm() {
         })
         .catch((err) => console.error("Failed to fetch devices", err));
     }
-  }, [selectedManufacturer, useLink]);
+  }, [selectedManufacturer]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,25 +64,24 @@ export default function DeviceForm() {
       params.source = linkSource;
       params.url = linkUrl;
     }
-    if (useLink && (params.link == "" || params.source_name == "")) {
-      console.log("link or source name not provided");
-      return;
-    }
+
     const queryString = new URLSearchParams(params).toString();
 
     try {
-      let response;
+      let linkresponse;
       if (useLink) {
-        response = await fetch(
+        linkresponse = await fetch(
           `http://localhost:8080/brands/${encodeURIComponent(selectedManufacturer)}/devices/${encodeURIComponent(selectedDevice)}/sources/link?${queryString}`,
         );
-      } else {
-        response = await fetch(
-          `http://localhost:8080/brands/${encodeURIComponent(selectedManufacturer)}/devices/${encodeURIComponent(selectedDevice)}/sources/data`,
-        );
       }
-      const data = await response.json();
-      setJsonOutput(data);
+
+      // const data = await dataresponse.json();
+      let link;
+      if (useLink) {
+        link = await linkresponse.json();
+      }
+      const finalObj = JSONCombiner(link || {});
+      setJsonOutput(finalObj);
     } catch (error) {
       console.error("Submission failed", error);
       setJsonOutput({ error: "Failed to fetch data" });

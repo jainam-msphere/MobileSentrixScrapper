@@ -31,7 +31,6 @@ func main() {
 	}
 
 	h := &handler.HandlerDb{Db: client.Db}
-	// migration.InitializeDbData(h)
 	router := router.New()
 	router.GET("/server:health", middleware.CORSMiddleware(h.HealthChecker))
 	router.GET("/brands/{brand_name}/devices/{item_name}/sources/{source_type}", middleware.CORSMiddleware(h.GetPhoneItem))

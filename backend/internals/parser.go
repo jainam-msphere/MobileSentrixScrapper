@@ -3,12 +3,10 @@ package internals
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/valyala/fasthttp"
 	"golang.org/x/net/html"
 )
 
@@ -20,95 +18,9 @@ type BodyObj struct {
 	CompanyName string `json:"company"`
 }
 
-func GSMParser(ctx *fasthttp.RequestCtx) {
-	var body struct {
-		HtmlString  string `json:"html"`
-		PhoneName   string `json:"phone"`
-		CompanyName string `json:"company"`
-	}
-
-	if err := json.Unmarshal(ctx.PostBody(), &body); err != nil {
-		log.Fatal("some issue occured while unmarshaling")
-		return
-	}
-
-	doc, _ := html.Parse(strings.NewReader(body.HtmlString))
-	var pointer *html.Node
-	var multipleData []string
-	var temp = JsonObject{}
-	var extractJson func(*html.Node)
-	var category, topic string
-	occurance := 0
-	extractJson = func(n *html.Node) {
-		if n.Type == html.ElementNode {
-			if n.Data == "th" || n.Data == "td" {
-				pointer = n
-			}
-			if n.Data == "tr" {
-				occurance = 0
-			}
-		}
-		if n.Type == html.TextNode && pointer != nil && n.NextSibling != nil && n.NextSibling.Data == "hr" {
-			multipleData = append(multipleData, n.Data)
-		} else if n.Type == html.TextNode && pointer != nil && n.PrevSibling != nil && n.PrevSibling.Data == "hr" {
-			multipleData = append(multipleData, n.Data)
-		} else if n.Type == html.TextNode && pointer != nil {
-			cleanText := strings.TrimSpace(n.Data)
-			if cleanText != "" {
-				if pointer.Data == "th" {
-					category = cleanText
-					if _, exists := temp[category]; !exists {
-						temp[category] = make(JsonObject)
-					}
-				} else if pointer.Data == "td" && category != "" {
-					occurance++
-					switch occurance {
-					case 1:
-						topic = cleanText
-					case 2:
-						if inner, ok := temp[category].(JsonObject); ok {
-							inner[topic] = cleanText
-						}
-						occurance = 0
-					}
-				}
-			}
-		}
-
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			extractJson(c)
-		}
-		if n == pointer {
-			if len(multipleData) > 0 {
-				if inner, ok := temp[category].(JsonObject); ok {
-					inner["OtherInfo"] = multipleData
-					multipleData = []string{}
-				}
-			}
-			pointer = nil
-		}
-	}
-	extractJson(doc.FirstChild)
-	tempJSON, _ := json.MarshalIndent(temp, "", "  ")
-	saveFile(tempJSON, body.PhoneName, body.CompanyName)
-	ctx.SetStatusCode(fasthttp.StatusOK)
-}
-
 func PDBParser(body BodyObj) ([]byte, error) {
-	// var body struct {
-	// 	HtmlString  string `json:"html"`
-	// 	PhoneName   string `json:"phone"`
-	// 	CompanyName string `json:"company"`
-	// }
-
-	// if err := json.Unmarshal(ctx.PostBody(), &body); err != nil {
-	// 	log.Fatal("some issue occured while unmarshaling")
-	// 	return
-	// }
-
 	doc, err := html.Parse(strings.NewReader(body.HtmlString))
 	if err != nil {
-		// ctx.Response.SetStatusCode(400)
 		return []byte{}, err
 	}
 
@@ -233,8 +145,6 @@ func PDBParser(body BodyObj) ([]byte, error) {
 						}
 					}
 				}
-				// case len(tds) >2:
-
 			}
 		}
 
@@ -257,7 +167,6 @@ func PDBParser(body BodyObj) ([]byte, error) {
 		"info":  info,
 	}
 	tempJSON, _ := json.MarshalIndent(result, "", "  ")
-	saveFile(tempJSON, body.PhoneName, body.CompanyName)
 	return tempJSON, nil
 }
 
