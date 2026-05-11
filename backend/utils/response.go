@@ -21,7 +21,7 @@ func SendJSON(ctx *fasthttp.RequestCtx, statusCode int, data interface{}) {
 
 // SendError sends an error response following AEP-193 RFC 9457 Problem Details format
 func SendError(ctx *fasthttp.RequestCtx, statusCode int, title string, detail interface{}) {
-	error := map[string]interface{}{
+	error := map[string]any{
 		"type":   GetErrorType(statusCode),
 		"status": statusCode,
 		"title":  title,

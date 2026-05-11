@@ -97,8 +97,19 @@ paths:
             enum:
               - phonedb
               - gsmarena
+              - devicespecifications
+              - phonemore
             description: tell from which source data needs to be fetched from
             example: gsmarena
+        - name: database_priority
+          in: query
+          schema:
+            type: boolean
+            enum:
+              - true
+              - false
+            description: true -> fetch from database, if not present fetch latest, false -> even though present or absent in db, fetch latest
+            example: true
 
       responses:
         "200":
@@ -305,9 +316,9 @@ components:
     Device:
       type: object
       required:
-        - phoneId
-        - phoneName
-        - companyName
+        - deviceId
+        - deviceName
+        - deviceBrand
       x-aep-resource:
         type: scrapper.com/scrapper
         singular: device

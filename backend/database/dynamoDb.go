@@ -21,7 +21,7 @@ type Client struct {
 func NewClient() *Client {
 	db_cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("ap-south-1"), config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("dummy", "dummysecret", "")))
 	if err != nil {
-		log.Fatalf("failed to create AWS session: %w", err)
+		log.Fatalf("failed to create AWS session: %v", err)
 		return nil
 	}
 	dynamoClient := dynamodb.NewFromConfig(db_cfg, func(o *dynamodb.Options) {

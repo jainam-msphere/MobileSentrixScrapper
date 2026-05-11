@@ -16,8 +16,8 @@ import (
 	"github.com/valyala/fasthttp"
 	"scrapper.com/database"
 	"scrapper.com/internals"
-	"scrapper.com/internals/utils"
 	"scrapper.com/models"
+	"scrapper.com/utils"
 )
 
 type HandlerDb struct {
@@ -56,160 +56,195 @@ func (h *HandlerDb) CreatePhoneItem(ctx *fasthttp.RequestCtx) {
 	json.NewEncoder(ctx).Encode(phoneData)
 }
 
-func (h *HandlerDb) GetPhoneItem(ctx *fasthttp.RequestCtx) {
-	itemVal := ctx.UserValue("item_name")
-	itemEncoded, ok := itemVal.(string)
-	if !ok || itemEncoded == "" {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "device name not found")
-		return
-	}
-	item, err := url.PathUnescape(itemEncoded)
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "device name invalid")
-		return
-	}
+func (h *HandlerDb) GetPhoneSpecificationsData() fasthttp.RequestHandler {
 
-	brandVal := ctx.UserValue("brand_name")
-	brandEncoded, ok := brandVal.(string)
-	if !ok || brandEncoded == "" {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name not found")
-		return
-	}
-	brand, err := url.PathUnescape(brandEncoded)
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name invalid")
-		return
-	}
-
-	sourceVal := ctx.UserValue("source_type")
-	sourceEncoded, ok := sourceVal.(string)
-	if !ok || sourceEncoded == "" {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type not found")
-		return
-	}
-	variant, err := url.PathUnescape(sourceEncoded)
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
-		return
-	}
-
-	source := string(ctx.QueryArgs().Peek("source_name"))
-	link := string(ctx.QueryArgs().Peek("link"))
-
-	if variant != "" && variant != "link" && variant != "data" {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "variant type invalid")
-		return
-	}
-	if brand == "" {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name invalid")
-		return
-	}
-	if variant == "link" && (source != "gsmarena" && source != "phonedb") {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
-		return
-	}
-	var result *dynamodb.QueryOutput
-
-	result, err = h.Db.Query(context.TODO(), &dynamodb.QueryInput{
-		TableName:              aws.String(database.TableName),
-		KeyConditionExpression: aws.String("deviceName = :device AND deviceBrand = :brand"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":device": &types.AttributeValueMemberS{Value: item},
-			":brand":  &types.AttributeValueMemberS{Value: brand},
-		},
-	})
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database fetch failed")
-		return
-	}
-
-	if result != nil && len(result.Items) > 0 {
-		var phone []models.ScrapData
-		err = attributevalue.UnmarshalListOfMaps(result.Items, &phone)
+	return func(ctx *fasthttp.RequestCtx) {
+		deviceNameParam := ctx.UserValue("item_name")
+		deviceNameEncoded, ok := deviceNameParam.(string)
+		if !ok || deviceNameEncoded == "" {
+			ctx.SetStatusCode(fasthttp.StatusBadRequest)
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "device name not found")
+			return
+		}
+		deviceName, err := url.PathUnescape(deviceNameEncoded)
 		if err != nil {
-			utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database read failed")
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "device name invalid")
 			return
 		}
 
-		response, err := json.Marshal(phone[0])
+		brandNameParam := ctx.UserValue("brand_name")
+		brandEncoded, ok := brandNameParam.(string)
+		if !ok || brandEncoded == "" {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name not found")
+			return
+		}
+		brand, err := url.PathUnescape(brandEncoded)
 		if err != nil {
-			utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database read failed")
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name invalid")
+			return
+		}
+
+		sourceValueParam := ctx.UserValue("source_type")
+		sourceEncoded, ok := sourceValueParam.(string)
+		if !ok || sourceEncoded == "" {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type not found")
+			return
+		}
+		dataFetchingMethod, err := url.PathUnescape(sourceEncoded)
+		if err != nil {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
+			return
+		}
+
+		source := string(ctx.QueryArgs().Peek("source_name"))
+		link := string(ctx.QueryArgs().Peek("link"))
+		priority := ctx.QueryArgs().GetBool("database_priority")
+
+		if dataFetchingMethod != "" && dataFetchingMethod != "link" && dataFetchingMethod != "data" {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "variant type invalid")
+			return
+		}
+		if brand == "" {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "brand name invalid")
+			return
+		}
+		if deviceName == "" {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "device name invalid")
+			return
+		}
+		if dataFetchingMethod == "link" && (source != "gsmarena" && source != "phonedb") {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "invalid params", "source type invalid")
+			return
+		}
+
+		if priority {
+			var result *dynamodb.QueryOutput
+
+			result, err = h.Db.Query(context.TODO(), &dynamodb.QueryInput{
+				TableName:              aws.String(database.TableName),
+				KeyConditionExpression: aws.String("deviceName = :device AND deviceBrand = :brand"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":device": &types.AttributeValueMemberS{Value: deviceName},
+					":brand":  &types.AttributeValueMemberS{Value: brand},
+				},
+			})
+			if err != nil {
+				utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database fetch failed")
+				return
+			}
+
+			if result != nil && len(result.Items) > 0 {
+				var phone []models.ScrapData
+				err = attributevalue.UnmarshalListOfMaps(result.Items, &phone)
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database read failed")
+					return
+				}
+
+				response, err := json.Marshal(phone[0])
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "database error", "database read failed")
+					return
+				}
+				ctx.SetContentType("application/json")
+				ctx.SetBody(response)
+				return
+			}
+		}
+		var scrapedDataFromName []byte
+		var scrapedDataFromLink []byte
+		if link != "" && brand != "none" && deviceName != "none" && !strings.Contains(link, brand) {
+			utils.SendError(ctx, fasthttp.StatusBadRequest, "params error", "you might have entered wrong link")
+			return
+		}
+		if link != "" && strings.Contains(link, "phonedb") {
+			scrapedDataFromLink = fetchDataFromLink(link, source, deviceName, brand, ctx)
+			if scrapedDataFromLink == nil {
+				log.Println("broken link provided")
+			}
+		}
+		if deviceName == "none" || brand == "none" {
+			scrapedDataFromName = []byte{}
+		} else {
+			if source == "devicespecifications" {
+				err, htmlStr := internals.FetchDeviceFromDeviceSpecification(brand, deviceName)
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
+					return
+				}
+				start_index := strings.Index(htmlStr, "<body>")
+				end_index := strings.Index(htmlStr, "</body>")
+				scrapedDataFromName, err = internals.FetchDataDeviceSpecifications(htmlStr[start_index : end_index+7])
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+					return
+				}
+			}
+			if source == "phonemore" {
+				err, htmlStr := internals.FetchDeviceFromPhoneMore(brand, deviceName)
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
+					return
+				}
+				scrapedDataFromName, err = internals.FetchHTMLDataPhoneMore(htmlStr)
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+					return
+				}
+			}
+			if source == "gsmarena" {
+				scrapedDataFromName, err = internals.FetchDataGSM(deviceName, brand)
+				if err != nil {
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
+					return
+				}
+			}
+		}
+
+		var parsedDataFromName map[string]any
+		if err := json.Unmarshal(scrapedDataFromName, &parsedDataFromName); len(scrapedDataFromName) > 0 && err != nil {
+			utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
+			return
+		}
+		var parsedDataFromLink map[string]any
+		if err := json.Unmarshal(scrapedDataFromLink, &parsedDataFromLink); len(scrapedDataFromLink) > 0 && link != "" && err != nil {
+			utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to extract data from provided link")
+			return
+		}
+		finalDeviceData := combinedDeviceDataResponseGenerator(parsedDataFromName, parsedDataFromLink)
+
+		phoneData := models.ScrapData{
+			DeviceId:    uuid.New().String(),
+			DeviceName:  deviceName,
+			DeviceBrand: brand,
+			DeviceInfo:  finalDeviceData,
+		}
+		phoneData.Path = string(ctx.Path())
+		response, err := json.Marshal(phoneData)
+		if deviceName == "none" || brand == "none" {
+			ctx.SetContentType("application/json")
+			ctx.SetStatusCode(fasthttp.StatusOK)
+			ctx.SetBody(response)
+			return
+		}
+		itemMap, err := attributevalue.MarshalMap(phoneData)
+
+		if err != nil {
+			utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
+			return
+		}
+
+		_, err = h.Db.PutItem(context.TODO(), &dynamodb.PutItemInput{
+			TableName: aws.String(database.TableName),
+			Item:      itemMap,
+		})
+		if err != nil {
+			utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
 			return
 		}
 		ctx.SetContentType("application/json")
 		ctx.SetBody(response)
-		return
 	}
-	var scrapedDataFromName []byte
-	var scrapedDataFromLink []byte
-	if link != "" && brand != "none" && item != "none" && !strings.Contains(link, brand) {
-		utils.SendError(ctx, fasthttp.StatusBadRequest, "params error", "you might have entered wrong link")
-		return
-	}
-	if link != "" && strings.Contains(link, "phonedb") {
-		scrapedDataFromLink = fetchDataFromLink(link, source, item, brand, ctx)
-		if scrapedDataFromLink == nil {
-			log.Println("broken link provided")
-		}
-	}
-	if item == "none" || brand == "none" {
-		scrapedDataFromName = []byte{}
-	} else {
-		scrapedDataFromName, err = internals.FetchDataGSM(item, brand)
-	}
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data")
-		return
-	}
-
-	var parsedDataFromName map[string]any
-	if err := json.Unmarshal(scrapedDataFromName, &parsedDataFromName); len(scrapedDataFromName) > 0 && err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
-		return
-	}
-	var parsedDataFromLink map[string]any
-	if err := json.Unmarshal(scrapedDataFromLink, &parsedDataFromLink); len(scrapedDataFromLink) > 0 && link != "" && err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to extract data from provided link")
-		return
-	}
-	finalDeviceData := combinedDeviceDataResponseGenerator(parsedDataFromName, parsedDataFromLink)
-
-	phoneData := models.ScrapData{
-		DeviceId:    uuid.New().String(),
-		DeviceName:  item,
-		DeviceBrand: brand,
-		DeviceInfo:  finalDeviceData,
-	}
-	phoneData.Path = string(ctx.Path())
-	response, err := json.Marshal(phoneData)
-	if item == "none" || brand == "none" {
-		ctx.SetContentType("application/json")
-		ctx.SetStatusCode(fasthttp.StatusOK)
-		ctx.SetBody(response)
-		return
-	}
-	itemMap, err := attributevalue.MarshalMap(phoneData)
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
-		return
-	}
-
-	_, err = h.Db.PutItem(context.TODO(), &dynamodb.PutItemInput{
-		TableName: aws.String(database.TableName),
-		Item:      itemMap,
-	})
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
-		return
-	}
-
-	if err != nil {
-		utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to generate response")
-		return
-	}
-	ctx.SetContentType("application/json")
-	ctx.SetBody(response)
 }
 
 func (h *HandlerDb) UpdateDevices(ctx *fasthttp.RequestCtx) {
@@ -247,13 +282,11 @@ func (h *HandlerDb) UpdateDevices(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	t := unique(findDevices(brandURL))
+	latestDevices := unique(findDevices(brandURL))
 
 	var newDevicesList models.DevicesInfo
 	newDevicesList.BrandName = manufacturer
-	newDevicesList.BrandDevicesList = t
-
-	fmt.Println(len(t), result.Items)
+	newDevicesList.BrandDevicesList = latestDevices
 
 	newList, err := attributevalue.Marshal(newDevicesList.BrandDevicesList)
 	if err != nil {
@@ -292,7 +325,7 @@ func (h *HandlerDb) HealthChecker(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-func fetchDataFromLink(link string, source string, item string, brand string, ctx *fasthttp.RequestCtx) []byte {
+func fetchDataFromLink(link string, source string, deviceName string, brand string, ctx *fasthttp.RequestCtx) []byte {
 	var scrapedData []byte
 	link, err := url.PathUnescape(link)
 	if err != nil {
@@ -300,19 +333,19 @@ func fetchDataFromLink(link string, source string, item string, brand string, ct
 		return nil
 	}
 	if source == "gsmarena" {
-		scrapedData, err = internals.PrintSpecList(link, item, brand)
+		scrapedData, err = internals.FetchDetailTableGSM(link, deviceName, brand)
 		if err != nil {
 			utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
 			return nil
 		}
 	}
 	if source == "phonedb" {
-		html, err := internals.FetchDetailTable(internals.PhoneResult{Title: item, DetailHref: link})
+		html, err := internals.FetchDetailTablePhoneDb(internals.PhoneResult{Title: deviceName, DetailHref: link})
 		if err != nil {
 			utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed fetching data pdb")
 			return nil
 		}
-		temp := internals.BodyObj{HtmlString: html, PhoneName: item, CompanyName: brand}
+		temp := internals.BodyObj{HtmlString: html, PhoneName: deviceName, CompanyName: brand}
 		scrapedData, err = internals.PDBParser(temp)
 		if err != nil {
 			utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data pdb")

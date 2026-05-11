@@ -17,8 +17,8 @@ import (
 	"github.com/valyala/fasthttp"
 	"golang.org/x/net/html"
 	"scrapper.com/internals"
-	"scrapper.com/internals/utils"
 	"scrapper.com/models"
+	"scrapper.com/utils"
 )
 
 const baseURL = "https://www.gsmarena.com/"

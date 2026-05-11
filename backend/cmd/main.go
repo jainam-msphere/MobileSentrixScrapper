@@ -33,7 +33,7 @@ func main() {
 	h := &handler.HandlerDb{Db: client.Db}
 	router := router.New()
 	router.GET("/server:health", middleware.CORSMiddleware(h.HealthChecker))
-	router.GET("/brands/{brand_name}/devices/{item_name}/sources/{source_type}", middleware.CORSMiddleware(h.GetPhoneItem))
+	router.GET("/brands/{brand_name}/devices/{item_name}/sources/{source_type}", middleware.CORSMiddleware(h.GetPhoneSpecificationsData()))
 	router.GET("/manufacturers", middleware.CORSMiddleware(h.GetBrands))
 	router.GET("/manufacturers/{manufacturer_name}/devices", middleware.CORSMiddleware(h.GetDevices))
 	router.PATCH("/manufacturers/{manufacturer_name}/devices", middleware.CORSMiddleware(h.UpdateDevices))

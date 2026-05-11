@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/valyala/fasthttp"
 	"scrapper.com/internals"
-	"scrapper.com/internals/utils"
 	"scrapper.com/models"
+	"scrapper.com/utils"
 )
 
 func (h *HandlerDb) GetBrands(ctx *fasthttp.RequestCtx) {

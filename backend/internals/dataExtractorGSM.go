@@ -285,7 +285,7 @@ func renderNode(n *html.Node, sb *strings.Builder) {
 	sb.WriteString("</" + n.Data + ">")
 }
 
-func PrintSpecList(deviceURL string, device string, brand string) ([]byte, error) {
+func FetchDetailTableGSM(deviceURL string, device string, brand string) ([]byte, error) {
 	doc, err := FetchHTML(deviceURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch device page: %w", err)
@@ -315,13 +315,7 @@ func PrintSpecList(deviceURL string, device string, brand string) ([]byte, error
 func FetchDataGSM(device string, brand string) ([]byte, error) {
 
 	brandName := brand
-	if brandName == "" {
-		brandName = "Google"
-	}
 	deviceName := device
-	if deviceName == "" {
-		deviceName = "Pixel 10 Pro"
-	}
 
 	brandURL, err := FindBrandUrl(brandName)
 	if err != nil {
@@ -332,7 +326,7 @@ func FetchDataGSM(device string, brand string) ([]byte, error) {
 	if deviceURL == "" {
 		phoneDbResult, doDeviceExistInPhoneDb := ScrapeFirstPhone(deviceName)
 		if doDeviceExistInPhoneDb {
-			html, err := FetchDetailTable(phoneDbResult)
+			html, err := FetchDetailTablePhoneDb(phoneDbResult)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -341,13 +335,10 @@ func FetchDataGSM(device string, brand string) ([]byte, error) {
 			if err != nil {
 				log.Fatal(err)
 			}
-			if err == nil {
-				return result, nil
-			}
+			return result, nil
 		}
 	} else {
-		fmt.Println(deviceURL, deviceName, brandName)
-		return PrintSpecList(deviceURL, deviceName, brandName)
+		return FetchDetailTableGSM(deviceURL, deviceName, brandName)
 	}
 	return []byte{}, nil
 }
@@ -357,102 +348,6 @@ type Body struct {
 	PhoneName   string `json:"phone"`
 	CompanyName string `json:"company"`
 }
-
-// func GsmParser(object []byte) []byte {
-// 	var body Body
-
-// 	if err := json.Unmarshal(object, &body); err != nil {
-// 		log.Fatal("some issue occured while unmarshaling")
-// 		return nil
-// 	}
-
-// 	doc, _ := html.Parse(strings.NewReader(body.HtmlString))
-// 	var pointer *html.Node
-// 	var multipleData []string
-// 	var temp = JsonObject{}
-// 	var extractJson func(*html.Node)
-// 	var category, topic string
-// 	occurance := 0
-// 	isOtherKey := false
-// 	extractJson = func(n *html.Node) {
-// 		if n.Type == html.ElementNode {
-// 			if n.Data == "th" || n.Data == "td" {
-// 				pointer = n
-// 			}
-// 			if n.Data == "tr" {
-// 				occurance = 0
-// 			}
-// 		}
-// 		if n.Type == html.TextNode && pointer != nil && n.NextSibling != nil && n.NextSibling.Data == "hr" {
-// 			multipleData = append(multipleData, n.Data)
-// 		} else if n.Type == html.TextNode && pointer != nil && n.PrevSibling != nil && n.PrevSibling.Data == "hr" {
-// 			multipleData = append(multipleData, n.Data)
-// 		} else if n.Type == html.TextNode && pointer != nil {
-// 			cleanText := strings.TrimSpace(n.Data)
-// 			if cleanText != "" {
-// 				if pointer.Data == "th" {
-// 					category = cleanText
-// 					if _, exists := temp[category]; !exists {
-// 						temp[category] = make(JsonObject)
-// 					}
-// 				} else if pointer.Data == "td" && category != "" {
-// 					if isOtherKey {
-// 						for _, a := range pointer.Attr {
-// 							if a.Key == "class" && strings.Contains(a.Val, "ttl") {
-// 								isOtherKey = !isOtherKey
-// 								occurance++
-// 								switch occurance {
-// 								case 1:
-// 									topic = cleanText
-// 								case 2:
-// 									if inner, ok := temp[category].(JsonObject); ok {
-// 										inner[topic] = cleanText
-// 									}
-// 									occurance = 0
-// 								}
-// 							}
-// 						}
-// 						multipleData = append(multipleData, pointer.Data)
-// 					} else {
-// 						occurance++
-// 						switch occurance {
-// 						case 1:
-// 							topic = cleanText
-// 						case 2:
-// 							if inner, ok := temp[category].(JsonObject); ok {
-// 								inner[topic] = cleanText
-// 							}
-// 							occurance = 0
-// 						}
-// 					}
-// 				}
-// 			} else {
-// 				for _, a := range pointer.Attr {
-// 					if a.Key == "class" && strings.Contains(a.Val, "ttl") {
-// 						isOtherKey = !isOtherKey
-// 					}
-// 				}
-// 			}
-// 		}
-
-// 		for c := n.FirstChild; c != nil; c = c.NextSibling {
-// 			extractJson(c)
-// 		}
-// 		if n == pointer {
-// 			if len(multipleData) > 0 {
-// 				if inner, ok := temp[category].(JsonObject); ok {
-// 					inner["OtherInfo"] = multipleData
-// 					multipleData = []string{}
-// 				}
-// 			}
-// 			pointer = nil
-// 		}
-// 	}
-// 	extractJson(doc.FirstChild)
-
-// 	tempJSON, _ := json.MarshalIndent(temp, "", "  ")
-// 	return tempJSON
-// }
 
 func GsmParser(object []byte) []byte {
 	var body Body
