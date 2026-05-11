@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
@@ -15,6 +16,7 @@ import (
 
 func FetchDeviceFromPhoneMore(brandName string, deviceName string) (error, string) {
 	c := colly.NewCollector()
+	c.SetRequestTimeout(30 * time.Second)
 	c.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 	c.WithTransport(&http.Transport{
 		TLSClientConfig: &tls.Config{

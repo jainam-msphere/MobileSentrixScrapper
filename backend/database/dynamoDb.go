@@ -25,7 +25,7 @@ func NewClient() *Client {
 		return nil
 	}
 	dynamoClient := dynamodb.NewFromConfig(db_cfg, func(o *dynamodb.Options) {
-		o.BaseEndpoint = aws.String("http://localhost:8000")
+		o.BaseEndpoint = aws.String("http://localhost:8001")
 	})
 	return &Client{Db: dynamoClient}
 }

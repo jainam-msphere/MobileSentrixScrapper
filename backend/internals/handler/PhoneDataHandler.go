@@ -169,7 +169,7 @@ func (h *HandlerDb) GetPhoneSpecificationsData() fasthttp.RequestHandler {
 			if source == "devicespecifications" {
 				err, htmlStr := internals.FetchDeviceFromDeviceSpecification(brand, deviceName)
 				if err != nil {
-					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data from device specifications")
 					return
 				}
 				start_index := strings.Index(htmlStr, "<body>")
@@ -183,7 +183,7 @@ func (h *HandlerDb) GetPhoneSpecificationsData() fasthttp.RequestHandler {
 			if source == "phonemore" {
 				err, htmlStr := internals.FetchDeviceFromPhoneMore(brand, deviceName)
 				if err != nil {
-					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data gsm")
+					utils.SendError(ctx, fasthttp.StatusInternalServerError, "process error", "failed scrapping data from phonemore")
 					return
 				}
 				scrapedDataFromName, err = internals.FetchHTMLDataPhoneMore(htmlStr)
@@ -211,7 +211,12 @@ func (h *HandlerDb) GetPhoneSpecificationsData() fasthttp.RequestHandler {
 			utils.SendError(ctx, fasthttp.StatusInternalServerError, "json error", "failed to extract data from provided link")
 			return
 		}
-		finalDeviceData := combinedDeviceDataResponseGenerator(parsedDataFromName, parsedDataFromLink)
+		var finalDeviceData map[string]any
+		if source == "link" {
+			finalDeviceData = combinedDeviceDataResponseGenerator(parsedDataFromName, parsedDataFromLink)
+		} else {
+			finalDeviceData = parsedDataFromName
+		}
 
 		phoneData := models.ScrapData{
 			DeviceId:    uuid.New().String(),
